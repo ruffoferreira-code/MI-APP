@@ -1,0 +1,1584 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0f766e" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Mis Laburos" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%230f766e' width='100' height='100' rx='20'/><text y='.72em' x='50%' text-anchor='middle' font-size='60'>🧰</text></svg>" />
+  <title>Mis Laburos</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧰</text></svg>" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: { 50:'#f0fdfa', 100:'#ccfbf1', 500:'#14b8a6', 600:'#0d9488', 700:'#0f766e', 800:'#115e59', 900:'#134e4a' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    :root { --safe-bottom: env(safe-area-inset-bottom, 0px); }
+    body { -webkit-tap-highlight-color: transparent; overscroll-behavior: none; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .badge { animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+    .card-enter { animation: slideUp .25s ease; }
+    @keyframes slideUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+    #toast { transition: all .3s ease; }
+    @media print {
+      body * { visibility: hidden; }
+      #factura-print, #factura-print * { visibility: visible; }
+      #factura-print { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen pb-24 font-sans">
+
+  <header class="bg-primary-700 text-white sticky top-0 z-40 shadow-lg no-print">
+    <div class="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <span class="text-2xl">🧰</span>
+        <div>
+          <h1 class="font-bold text-lg leading-tight">Mis Laburos</h1>
+          <p class="text-xs text-primary-100 opacity-90" id="header-date"></p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="toggleNotificaciones()" class="relative p-2 rounded-full hover:bg-primary-600 transition" title="Notificaciones">
+          <span class="text-xl">🔔</span>
+          <span id="notif-badge" class="hidden absolute -top-0.5 -right-0.5 w-3 h-3 bg-red-500 rounded-full border-2 border-primary-700"></span>
+        </button>
+        <button onclick="exportarDatos()" class="p-2 rounded-full hover:bg-primary-600 transition" title="Exportar">
+          <span class="text-xl">📤</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="max-w-lg mx-auto px-4 -mt-1 no-print">
+    <div class="bg-white rounded-2xl shadow-md p-4 grid grid-cols-3 gap-2 text-center border border-slate-100">
+      <div>
+        <p class="text-xs text-slate-500">Pendiente</p>
+        <p class="font-bold text-amber-600 text-lg" id="resumen-pendiente">Gs. 0</p>
+      </div>
+      <div>
+        <p class="text-xs text-slate-500">Este mes</p>
+        <p class="font-bold text-primary-700 text-lg" id="resumen-mes">Gs. 0</p>
+      </div>
+      <div>
+        <p class="text-xs text-slate-500">Balance</p>
+        <p class="font-bold text-lg" id="resumen-balance">Gs. 0</p>
+      </div>
+    </div>
+  </div>
+
+  <main class="max-w-lg mx-auto px-4 mt-4">
+
+    <!-- TAB LABUROS -->
+    <div id="tab-laburos" class="tab-content active no-print">
+      <section class="mb-5">
+        <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2 flex items-center gap-1"><span>📅</span> Hoy</h2>
+        <div id="laburos-hoy" class="space-y-2"></div>
+        <p id="sin-hoy" class="text-center text-slate-400 text-sm py-4 hidden">No tenés laburos para hoy 🎉</p>
+      </section>
+
+      <section class="mb-5 bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+        <h2 class="font-semibold text-primary-800 mb-2 flex items-center gap-2"><span>💬</span> Pegar mensaje de WhatsApp</h2>
+        <p class="text-xs text-slate-500 mb-3">Pegá el mensaje y se completa solo: cliente, fecha, hora, lugar y monto.</p>
+        <textarea id="whatsapp-input" rows="3" placeholder="Ej: Hola Benja, el martes 8 a las 10 el laburo de cámara, 450000" class="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary-500 outline-none resize-none"></textarea>
+        <div class="flex gap-2 mt-3">
+          <button onclick="parsearWhatsApp()" class="flex-1 bg-primary-600 hover:bg-primary-700 text-white font-medium py-2.5 rounded-xl text-sm transition active:scale-95">✨ Extraer laburo</button>
+          <button onclick="limpiarMensaje()" class="px-4 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-600 hover:bg-slate-50">Limpiar</button>
+        </div>
+        <div id="parse-result" class="hidden mt-3 p-3 bg-primary-50 rounded-xl text-sm"></div>
+      </section>
+
+      <section>
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Todos los laburos</h2>
+          <button onclick="abrirModalLaburo()" class="text-primary-600 text-sm font-medium flex items-center gap-1"><span class="text-lg">+</span> Nuevo</button>
+        </div>
+        <div class="flex gap-2 mb-3 overflow-x-auto pb-1">
+          <button onclick="filtrarLaburos('todos')" class="filtro-laburo active px-3 py-1 rounded-full text-xs font-medium bg-primary-100 text-primary-800 whitespace-nowrap">Todos</button>
+          <button onclick="filtrarLaburos('pendiente')" class="filtro-laburo px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 whitespace-nowrap">Pendientes</button>
+          <button onclick="filtrarLaburos('pagado')" class="filtro-laburo px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 whitespace-nowrap">Pagados</button>
+          <button onclick="filtrarLaburos('futuros')" class="filtro-laburo px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 whitespace-nowrap">Próximos</button>
+        </div>
+        <div id="lista-laburos" class="space-y-2"></div>
+        <p id="sin-laburos" class="text-center text-slate-400 text-sm py-8 hidden">Todavía no cargaste ningún laburo</p>
+      </section>
+    </div>
+
+    <!-- TAB FACTURAS -->
+    <div id="tab-facturas" class="tab-content no-print">
+      <section class="mb-5 bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+        <h2 class="font-semibold text-primary-800 mb-3 flex items-center gap-2"><span>🧾</span> Generar factura</h2>
+        <div class="space-y-3">
+          <div>
+            <label class="text-xs text-slate-500">Cliente</label>
+            <select id="factura-cliente" class="w-full border border-slate-200 rounded-xl p-3 text-sm mt-1 focus:ring-2 focus:ring-primary-500 outline-none bg-white" onchange="cargarRucCliente()">
+              <option value="">— Seleccioná un cliente —</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-slate-500">RUC del cliente</label>
+            <input id="factura-ruc" type="text" placeholder="Ej: 80017756-8" class="w-full border border-slate-200 rounded-xl p-3 text-sm mt-1 focus:ring-2 focus:ring-primary-500 outline-none" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-slate-500">Desde</label>
+              <input id="factura-desde" type="date" class="w-full border border-slate-200 rounded-xl p-3 text-sm mt-1 focus:ring-2 focus:ring-primary-500 outline-none" />
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">Hasta</label>
+              <input id="factura-hasta" type="date" class="w-full border border-slate-200 rounded-xl p-3 text-sm mt-1 focus:ring-2 focus:ring-primary-500 outline-none" />
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="setPeriodo('semana')" class="flex-1 text-xs border border-slate-200 py-2 rounded-xl hover:bg-slate-50">Esta semana</button>
+            <button onclick="setPeriodo('mes')" class="flex-1 text-xs border border-slate-200 py-2 rounded-xl hover:bg-slate-50">Este mes</button>
+            <button onclick="setPeriodo('todo')" class="flex-1 text-xs border border-slate-200 py-2 rounded-xl hover:bg-slate-50">Todo</button>
+          </div>
+          <div>
+            <label class="text-xs text-slate-500">Tu nombre / Razón social</label>
+            <input id="factura-emisor" type="text" placeholder="Ej: Rufo Ferreira" class="w-full border border-slate-200 rounded-xl p-3 text-sm mt-1 focus:ring-2 focus:ring-primary-500 outline-none" />
+          </div>
+          <div>
+            <label class="text-xs text-slate-500">Descripción del servicio</label>
+            <input id="factura-servicio" type="text" value="Servicios de CAMARÓGRAFO" class="w-full border border-slate-200 rounded-xl p-3 text-sm mt-1 focus:ring-2 focus:ring-primary-500 outline-none" />
+          </div>
+          <button onclick="generarFactura()" class="w-full bg-primary-600 hover:bg-primary-700 text-white font-medium py-3 rounded-xl text-sm transition active:scale-95">Generar factura</button>
+        </div>
+      </section>
+
+      <div id="factura-preview" class="hidden mb-5">
+        <div class="flex gap-2 mb-3 flex-wrap">
+          <button onclick="copiarFactura()" class="flex-1 min-w-[40%] bg-slate-800 text-white py-2.5 rounded-xl text-sm font-medium">📋 Copiar</button>
+          <button onclick="compartirFacturaWhatsApp()" class="flex-1 min-w-[40%] bg-emerald-600 text-white py-2.5 rounded-xl text-sm font-medium">💬 WhatsApp</button>
+          <button onclick="window.print()" class="flex-1 min-w-[40%] bg-primary-600 text-white py-2.5 rounded-xl text-sm font-medium">🖨️ Imprimir</button>
+        </div>
+        <div id="factura-print" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 text-sm leading-relaxed whitespace-pre-wrap font-mono"></div>
+      </div>
+
+      <section class="mb-5 bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+        <div class="flex justify-between items-center mb-3">
+          <h2 class="font-semibold text-primary-800 flex items-center gap-2"><span>👥</span> Clientes</h2>
+          <button onclick="abrirCliente()" class="text-sm font-medium text-primary-700">+ Nuevo</button>
+        </div>
+        <input id="buscar-cliente" type="search" oninput="renderFacturasUI()" placeholder="Buscar por nombre, RUC o teléfono…" class="w-full border border-slate-200 rounded-xl p-2.5 text-sm mb-3 focus:ring-2 focus:ring-primary-500 outline-none" />
+        <div id="lista-clientes" class="space-y-2 text-sm"></div>
+        <p id="sin-clientes" class="text-center text-slate-400 text-xs py-4 hidden">Todavía no hay clientes. Tocá "+ Nuevo" o agregá laburos con nombre de cliente.</p>
+      </section>
+
+      <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+        <h2 class="font-semibold text-primary-800 mb-1 flex items-center gap-2"><span>🗂️</span> Facturas emitidas</h2>
+        <p id="resumen-facturas" class="text-xs text-slate-500 mb-3"></p>
+        <div id="lista-facturas" class="space-y-2 text-sm"></div>
+        <p id="sin-facturas" class="text-center text-slate-400 text-xs py-4 hidden">Todavía no generaste facturas. Se guardan acá automáticamente.</p>
+      </section>
+    </div>
+
+    <!-- TAB ANÁLISIS -->
+    <div id="tab-ahorro" class="tab-content no-print">
+      <section class="mb-4">
+        <div class="bg-gradient-to-br from-primary-600 to-primary-800 rounded-2xl p-5 text-white shadow-lg">
+          <p class="text-sm opacity-90">Ingresos del mes (pagados)</p>
+          <p class="text-3xl font-bold mt-1" id="ahorro-ingresos">Gs. 0</p>
+          <div class="grid grid-cols-2 gap-4 mt-4 text-sm">
+            <div><p class="opacity-80">Gastos</p><p class="font-semibold text-lg" id="ahorro-gastos">Gs. 0</p></div>
+            <div><p class="opacity-80">Disponible</p><p class="font-semibold text-lg" id="ahorro-disponible">Gs. 0</p></div>
+          </div>
+          <div class="mt-4 bg-white/20 rounded-full h-2 overflow-hidden">
+            <div id="barra-ahorro" class="bg-white h-full rounded-full transition-all duration-500" style="width:0%"></div>
+          </div>
+          <p class="text-xs mt-2 opacity-80" id="porcentaje-ahorro">0% del ingreso disponible</p>
+        </div>
+      </section>
+
+      <section class="mb-4 grid grid-cols-2 gap-3">
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 text-center">
+          <p class="text-xs text-slate-500">Laburos este mes</p>
+          <p class="text-2xl font-bold text-primary-700" id="stat-laburos-mes">0</p>
+        </div>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 text-center">
+          <p class="text-xs text-slate-500">Ticket promedio</p>
+          <p class="text-2xl font-bold text-primary-700" id="stat-ticket">Gs. 0</p>
+        </div>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 text-center">
+          <p class="text-xs text-slate-500">Clientes activos</p>
+          <p class="text-2xl font-bold text-primary-700" id="stat-clientes">0</p>
+        </div>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 text-center">
+          <p class="text-xs text-slate-500">Tasa de cobro</p>
+          <p class="text-2xl font-bold text-emerald-600" id="stat-cobro">0%</p>
+        </div>
+      </section>
+
+      <section class="mb-4 bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+        <h2 class="font-semibold text-primary-800 mb-3 flex items-center gap-2 text-sm"><span>📊</span> Ingresos vs Gastos (6 meses)</h2>
+        <div class="relative h-48"><canvas id="chart-meses"></canvas></div>
+      </section>
+
+      <section class="mb-4 bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+        <h2 class="font-semibold text-primary-800 mb-3 flex items-center gap-2 text-sm"><span>👥</span> Ingresos por cliente</h2>
+        <div class="relative h-48"><canvas id="chart-clientes"></canvas></div>
+        <p id="sin-chart-clientes" class="text-center text-slate-400 text-xs py-4 hidden">Cargá laburos con cliente para ver el gráfico</p>
+      </section>
+
+      <section class="mb-4 bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+        <h2 class="font-semibold text-primary-800 mb-3 flex items-center gap-2 text-sm"><span>💰</span> Estado de cobros</h2>
+        <div class="relative h-40 max-w-[200px] mx-auto"><canvas id="chart-estado"></canvas></div>
+      </section>
+
+      <section class="mb-4">
+        <h2 class="font-semibold text-primary-800 mb-3 flex items-center gap-2 text-sm"><span>🔍</span> Análisis</h2>
+        <div id="analisis-lista" class="space-y-3"></div>
+      </section>
+
+      <section class="mb-5">
+        <h2 class="font-semibold text-primary-800 mb-3 flex items-center gap-2 text-sm"><span>💡</span> Consejos</h2>
+        <div id="consejos-lista" class="space-y-3"></div>
+      </section>
+    </div>
+
+    <!-- TAB GASTOS -->
+    <div id="tab-gastos" class="tab-content no-print">
+      <section class="mb-5 bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+        <h2 class="font-semibold text-primary-800 mb-3 flex items-center gap-2"><span>💸</span> Nuevo gasto</h2>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="col-span-2">
+            <input id="gasto-desc" type="text" placeholder="Descripción (ej: nafta, materiales...)" class="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary-500 outline-none" />
+          </div>
+          <div>
+            <input id="gasto-monto" type="number" placeholder="Monto Gs." class="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary-500 outline-none" />
+          </div>
+          <div>
+            <select id="gasto-categoria" class="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary-500 outline-none bg-white">
+              <option value="Materiales">🔧 Materiales</option>
+              <option value="Transporte">🚗 Transporte</option>
+              <option value="Comida">🍔 Comida</option>
+              <option value="Herramientas">🛠️ Herramientas</option>
+              <option value="Otros">📦 Otros</option>
+            </select>
+          </div>
+          <div class="col-span-2">
+            <button onclick="agregarGasto()" class="w-full bg-rose-500 hover:bg-rose-600 text-white font-medium py-2.5 rounded-xl text-sm transition active:scale-95">Agregar gasto</button>
+          </div>
+        </div>
+      </section>
+      <section>
+        <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2">Gastos del mes</h2>
+        <div id="lista-gastos" class="space-y-2"></div>
+        <p id="sin-gastos" class="text-center text-slate-400 text-sm py-8 hidden">No hay gastos registrados este mes</p>
+      </section>
+    </div>
+
+    <!-- TAB AJUSTES -->
+    <div id="tab-ajustes" class="tab-content no-print">
+      <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 mb-4">
+        <h2 class="font-semibold mb-3">🔔 Notificaciones</h2>
+        <div class="space-y-3">
+          <label class="flex items-center justify-between"><span class="text-sm">Recordatorio de laburos del día</span><input type="checkbox" id="cfg-laburo-dia" checked class="w-5 h-5 accent-primary-600" onchange="guardarConfig()" /></label>
+          <label class="flex items-center justify-between"><span class="text-sm">Alarma de pagos pendientes</span><input type="checkbox" id="cfg-pagos-pend" checked class="w-5 h-5 accent-primary-600" onchange="guardarConfig()" /></label>
+          <div class="flex items-center justify-between"><span class="text-sm">Hora del recordatorio</span><input type="time" id="cfg-hora" value="08:00" class="border border-slate-200 rounded-lg px-2 py-1 text-sm" onchange="guardarConfig()" /></div>
+          <button onclick="solicitarPermisoNotificaciones()" class="w-full mt-2 bg-primary-600 text-white py-2.5 rounded-xl text-sm font-medium">Activar notificaciones</button>
+          <p id="notif-status" class="text-xs text-center text-slate-500 mt-1"></p>
+        </div>
+      </section>
+      <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 mb-4">
+        <h2 class="font-semibold mb-3">💾 Datos</h2>
+        <div class="space-y-2">
+          <button onclick="descargarApp()" class="w-full bg-primary-600 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-primary-700">⬇️ Descargar app (HTML)</button>
+          <button onclick="compartirWhatsApp()" class="w-full bg-emerald-600 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-emerald-700">💬 Compartir por WhatsApp</button>
+          <button onclick="exportarDatos()" class="w-full border border-slate-200 py-2.5 rounded-xl text-sm hover:bg-slate-50">Exportar backup (JSON)</button>
+          <label class="w-full border border-slate-200 py-2.5 rounded-xl text-sm hover:bg-slate-50 block text-center cursor-pointer">Importar backup<input type="file" accept=".json" onchange="importarDatos(event)" class="hidden" /></label>
+          <button onclick="borrarTodo()" class="w-full border border-red-200 text-red-600 py-2.5 rounded-xl text-sm hover:bg-red-50">Borrar todos los datos</button>
+        </div>
+      </section>
+      <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+        <h2 class="font-semibold mb-2">ℹ️ Memoria y pantalla de inicio</h2>
+        <ul class="text-xs text-slate-600 space-y-1 list-disc pl-4">
+          <li><strong>Todo se guarda solo</strong> en este dispositivo (laburos, gastos, clientes, RUC).</li>
+          <li>No se borra al cerrar el navegador. Solo se pierde si borrás datos del sitio.</li>
+          <li>Usá <strong>Exportar backup</strong> de vez en cuando por seguridad.</li>
+          <li>Para tenerla en el inicio: menú del navegador → "Agregar a pantalla de inicio" / "Instalar app".</li>
+        </ul>
+        <button onclick="mostrarAyudaInstall()" class="w-full mt-3 border border-primary-200 text-primary-700 py-2.5 rounded-xl text-sm font-medium">📲 Cómo instalar en el inicio</button>
+      </section>
+    </div>
+  </main>
+
+  <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50 no-print" style="padding-bottom: var(--safe-bottom);">
+    <div class="max-w-lg mx-auto grid grid-cols-5 text-center">
+      <button onclick="cambiarTab('laburos')" class="nav-btn py-3 text-primary-600" data-tab="laburos"><div class="text-xl">🧰</div><div class="text-[10px] font-medium mt-0.5">Laburos</div></button>
+      <button onclick="cambiarTab('facturas')" class="nav-btn py-3 text-slate-400" data-tab="facturas"><div class="text-xl">🧾</div><div class="text-[10px] font-medium mt-0.5">Facturas</div></button>
+      <button onclick="cambiarTab('ahorro')" class="nav-btn py-3 text-slate-400" data-tab="ahorro"><div class="text-xl">📊</div><div class="text-[10px] font-medium mt-0.5">Análisis</div></button>
+      <button onclick="cambiarTab('gastos')" class="nav-btn py-3 text-slate-400" data-tab="gastos"><div class="text-xl">💸</div><div class="text-[10px] font-medium mt-0.5">Gastos</div></button>
+      <button onclick="cambiarTab('ajustes')" class="nav-btn py-3 text-slate-400" data-tab="ajustes"><div class="text-xl">⚙️</div><div class="text-[10px] font-medium mt-0.5">Ajustes</div></button>
+    </div>
+  </nav>
+
+  <!-- Modal ficha de cliente -->
+  <div id="modal-cliente" class="fixed inset-0 bg-black/50 z-50 hidden items-end sm:items-center justify-center no-print">
+    <div class="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-2xl p-5 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="font-bold text-lg" id="cliente-titulo">Ficha de cliente</h3>
+        <button onclick="cerrarCliente()" class="text-2xl text-slate-400">&times;</button>
+      </div>
+      <input type="hidden" id="cli-orig" />
+      <div class="space-y-3">
+        <div><label class="text-xs text-slate-500">Nombre (como lo llamás)</label><input id="cli-nombre" type="text" placeholder="Ej: Benja" class="w-full border border-slate-200 rounded-xl p-3 text-sm mt-1 focus:ring-2 focus:ring-primary-500 outline-none" /></div>
+        <div><label class="text-xs text-slate-500">Razón social / propietario del RUC</label><input id="cli-razon" type="text" placeholder="Ej: DUX S.R.L." class="w-full border border-slate-200 rounded-xl p-3 text-sm mt-1 focus:ring-2 focus:ring-primary-500 outline-none" /></div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="text-xs text-slate-500">RUC</label><input id="cli-ruc" type="text" placeholder="80017756-8" class="w-full border border-slate-200 rounded-xl p-3 text-sm mt-1 focus:ring-2 focus:ring-primary-500 outline-none" /></div>
+          <div><label class="text-xs text-slate-500">Teléfono</label><input id="cli-tel" type="tel" placeholder="0981 123 456" class="w-full border border-slate-200 rounded-xl p-3 text-sm mt-1 focus:ring-2 focus:ring-primary-500 outline-none" /></div>
+        </div>
+        <div><label class="text-xs text-slate-500">Dirección</label><input id="cli-dir" type="text" placeholder="Ej: Luque" class="w-full border border-slate-200 rounded-xl p-3 text-sm mt-1 focus:ring-2 focus:ring-primary-500 outline-none" /></div>
+        <div><label class="text-xs text-slate-500">Descripción habitual en la factura</label><input id="cli-servicio" type="text" placeholder="Servicios de CAMARÓGRAFO" class="w-full border border-slate-200 rounded-xl p-3 text-sm mt-1 focus:ring-2 focus:ring-primary-500 outline-none" /></div>
+        <div><label class="text-xs text-slate-500">Tarifa habitual por laburo (Gs.)</label><input id="cli-tarifa" type="number" inputmode="numeric" placeholder="0" class="w-full border border-slate-200 rounded-xl p-3 text-sm mt-1 focus:ring-2 focus:ring-primary-500 outline-none" /></div>
+        <div><label class="text-xs text-slate-500">Notas</label><textarea id="cli-notas" rows="2" class="w-full border border-slate-200 rounded-xl p-3 text-sm mt-1 focus:ring-2 focus:ring-primary-500 outline-none resize-none"></textarea></div>
+      </div>
+      <div class="flex gap-2 mt-4">
+        <button id="cli-eliminar" onclick="eliminarCliente()" class="hidden px-4 py-3 border border-rose-200 text-rose-600 rounded-xl text-sm font-medium">Eliminar</button>
+        <button onclick="guardarCliente()" class="flex-1 bg-primary-600 text-white py-3 rounded-xl text-sm font-medium">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div id="modal-laburo" class="fixed inset-0 bg-black/50 z-50 hidden items-end sm:items-center justify-center no-print">
+    <div class="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-2xl p-5 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="font-bold text-lg" id="modal-titulo">Nuevo laburo</h3>
+        <button onclick="cerrarModal()" class="text-2xl text-slate-400">&times;</button>
+      </div>
+      <input type="hidden" id="laburo-id" />
+      <div class="space-y-3">
+        <div>
+          <label class="text-xs text-slate-500">Cliente</label>
+          <input id="laburo-cliente" onchange="autocompletarCliente()" type="text" placeholder="Ej: Benja, DUX S.R.L." list="clientes-list" class="w-full border border-slate-200 rounded-xl p-3 text-sm mt-1 focus:ring-2 focus:ring-primary-500 outline-none" />
+          <datalist id="clientes-list"></datalist>
+        </div>
+        <div>
+          <label class="text-xs text-slate-500">Descripción</label>
+          <input id="laburo-desc" type="text" placeholder="Ej: Grabación evento" class="w-full border border-slate-200 rounded-xl p-3 text-sm mt-1 focus:ring-2 focus:ring-primary-500 outline-none" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs text-slate-500">Fecha</label>
+            <input id="laburo-fecha" type="date" class="w-full border border-slate-200 rounded-xl p-3 text-sm mt-1 focus:ring-2 focus:ring-primary-500 outline-none" />
+          </div>
+          <div>
+            <label class="text-xs text-slate-500">Hora</label>
+            <input id="laburo-hora" type="time" class="w-full border border-slate-200 rounded-xl p-3 text-sm mt-1 focus:ring-2 focus:ring-primary-500 outline-none" />
+          </div>
+        </div>
+        <div>
+          <label class="text-xs text-slate-500">Monto (Gs.)</label>
+          <input id="laburo-monto" type="number" placeholder="0" class="w-full border border-slate-200 rounded-xl p-3 text-sm mt-1 focus:ring-2 focus:ring-primary-500 outline-none" />
+        </div>
+        <div>
+          <label class="text-xs text-slate-500">Estado</label>
+          <div class="flex gap-2 mt-1">
+            <button type="button" onclick="setEstado('pendiente')" id="btn-pendiente" class="flex-1 py-2.5 rounded-xl text-sm font-medium border-2 border-amber-400 bg-amber-50 text-amber-700">Pendiente</button>
+            <button type="button" onclick="setEstado('pagado')" id="btn-pagado" class="flex-1 py-2.5 rounded-xl text-sm font-medium border-2 border-slate-200 text-slate-500">Pagado</button>
+          </div>
+        </div>
+        <div>
+          <label class="text-xs text-slate-500">Notas</label>
+          <textarea id="laburo-notas" rows="2" class="w-full border border-slate-200 rounded-xl p-3 text-sm mt-1 focus:ring-2 focus:ring-primary-500 outline-none resize-none"></textarea>
+        </div>
+        <button onclick="guardarLaburo()" class="w-full bg-primary-600 text-white font-medium py-3 rounded-xl mt-2">Guardar laburo</button>
+        <button id="btn-eliminar" onclick="eliminarLaburo()" class="w-full text-red-500 text-sm py-2 hidden">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  
+  <!-- Banner instalar en inicio -->
+  <div id="install-banner" class="fixed bottom-20 left-4 right-4 max-w-lg mx-auto bg-primary-800 text-white rounded-2xl p-4 shadow-xl z-[55] hidden no-print">
+    <div class="flex items-start gap-3">
+      <span class="text-3xl">📲</span>
+      <div class="flex-1">
+        <p class="font-semibold text-sm">Instalá en tu pantalla de inicio</p>
+        <p class="text-xs opacity-90 mt-0.5">Así queda como una app y recuerda todos tus laburos.</p>
+        <div class="flex gap-2 mt-3">
+          <button id="btn-install" class="bg-white text-primary-800 text-xs font-bold px-4 py-2 rounded-xl">Instalar</button>
+          <button onclick="cerrarBannerInstall()" class="text-xs opacity-80 px-3 py-2">Ahora no</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="fixed top-20 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-full text-sm shadow-lg z-[60] opacity-0 pointer-events-none no-print"></div>
+
+<script>
+let laburos = JSON.parse(localStorage.getItem('laburos') || '[]');
+let gastos = JSON.parse(localStorage.getItem('gastos') || '[]');
+let clientesRuc = JSON.parse(localStorage.getItem('clientesRuc') || '{}');
+let clientesDB = JSON.parse(localStorage.getItem('clientesDB') || '{}');
+let facturasDB = JSON.parse(localStorage.getItem('facturasDB') || '[]');
+let config = JSON.parse(localStorage.getItem('config') || '{"laburoDia":true,"pagosPend":true,"hora":"08:00","emisor":"Rufo Ferreira"}');
+let filtroActual = 'todos';
+let estadoModal = 'pendiente';
+let notifInterval = null;
+let ultimaFacturaTexto = '';
+let chartMeses = null, chartClientes = null, chartEstado = null;
+
+const $ = id => document.getElementById(id);
+const fmt = n => 'Gs. ' + new Intl.NumberFormat('es-PY', { maximumFractionDigits: 0 }).format(n || 0);
+const iso10 = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const hoy = () => iso10(new Date());
+const mesActual = () => hoy().slice(0, 7);
+
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.remove('opacity-0'); t.classList.add('opacity-100');
+  setTimeout(() => { t.classList.add('opacity-0'); t.classList.remove('opacity-100'); }, 2500);
+}
+function guardar() {
+  localStorage.setItem('laburos', JSON.stringify(laburos));
+  localStorage.setItem('gastos', JSON.stringify(gastos));
+  Object.keys(clientesDB).forEach(n => { if (clientesDB[n].ruc) clientesRuc[n] = clientesDB[n].ruc; });
+  localStorage.setItem('clientesRuc', JSON.stringify(clientesRuc));
+  localStorage.setItem('clientesDB', JSON.stringify(clientesDB));
+  localStorage.setItem('facturasDB', JSON.stringify(facturasDB));
+  localStorage.setItem('config', JSON.stringify(config));
+}
+
+function numeroALetras(n) {
+  n = Math.floor(Math.abs(n));
+  if (n === 0) return 'cero';
+  const u = ['','uno','dos','tres','cuatro','cinco','seis','siete','ocho','nueve'];
+  const d = ['','diez','veinte','treinta','cuarenta','cincuenta','sesenta','setenta','ochenta','noventa'];
+  const e = ['diez','once','doce','trece','catorce','quince','dieciséis','diecisiete','dieciocho','diecinueve'];
+  const c = ['','ciento','doscientos','trescientos','cuatrocientos','quinientos','seiscientos','setecientos','ochocientos','novecientos'];
+  function h(num) {
+    if (num === 0) return '';
+    if (num === 100) return 'cien';
+    let s = '';
+    const cen = Math.floor(num / 100), res = num % 100;
+    if (cen) s += c[cen];
+    if (res) {
+      if (s) s += ' ';
+      if (res < 10) s += u[res];
+      else if (res < 20) s += e[res - 10];
+      else {
+        const dec = Math.floor(res / 10), uni = res % 10;
+        s += d[dec];
+        if (uni) s += (dec === 2 ? 'i' : ' y ') + u[uni];
+      }
+    }
+    return s;
+  }
+  if (n < 1000) return h(n);
+  if (n < 1000000) {
+    const mil = Math.floor(n / 1000), res = n % 1000;
+    let s = mil === 1 ? 'mil' : h(mil) + ' mil';
+    if (res) s += ' ' + h(res);
+    return s;
+  }
+  if (n < 1000000000) {
+    const mill = Math.floor(n / 1000000), res = n % 1000000;
+    let s = mill === 1 ? 'un millón' : h(mill) + ' millones';
+    if (res) s += ' ' + numeroALetras(res);
+    return s;
+  }
+  return String(n);
+}
+function montoEnLetras(n) {
+  const letras = numeroALetras(n);
+  return letras.charAt(0).toUpperCase() + letras.slice(1) + ' guaraníes';
+}
+
+function cambiarTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(btn => { btn.classList.remove('text-primary-600'); btn.classList.add('text-slate-400'); });
+  $('tab-' + tab).classList.add('active');
+  const btn = document.querySelector('[data-tab="' + tab + '"]');
+  if (btn) { btn.classList.remove('text-slate-400'); btn.classList.add('text-primary-600'); }
+  if (tab === 'laburos') renderLaburos();
+  if (tab === 'facturas') renderFacturasUI();
+  if (tab === 'ahorro') renderAhorro();
+  if (tab === 'gastos') renderGastos();
+  if (tab === 'ajustes') actualizarEstadoNotif();
+}
+
+function obtenerClientes() {
+  const set = new Set();
+  laburos.forEach(l => { if (l.cliente && l.cliente.trim()) set.add(l.cliente.trim()); });
+  Object.keys(clientesDB).forEach(n => { if (n.trim()) set.add(n.trim()); });
+  return Array.from(set).sort((a, b) => a.localeCompare(b, 'es'));
+}
+function actualizarDatalistClientes() {
+  $('clientes-list').innerHTML = obtenerClientes().map(c => '<option value="' + esc(c) + '">').join('');
+}
+
+/* ===== BASE DE DATOS: FICHAS DE CLIENTES + HISTORIAL DE FACTURAS ===== */
+const attr = s => esc(s).replace(/"/g, '&quot;');
+const fechaCorta = f => String(f || '').split('-').reverse().join('/');
+let ultimaFacturaId = null, envioPendiente = null;
+const telWa = t => { const d = String(t || '').replace(/\D/g, ''); if (!d) return ''; return 'https://wa.me/' + (d.startsWith('595') ? d : d.startsWith('0') ? '595' + d.slice(1) : d); };
+
+function migrarRucADB() {
+  Object.keys(clientesRuc).forEach(n => {
+    const d = clientesDB[n] || (clientesDB[n] = { nombre: n });
+    if (!d.ruc) d.ruc = clientesRuc[n];
+  });
+}
+migrarRucADB();
+
+/* ---- Ficha de cliente ---- */
+function abrirCliente(nombre) {
+  const d = (nombre && clientesDB[nombre]) || {};
+  $('cli-orig').value = nombre || '';
+  $('cli-nombre').value = nombre || '';
+  $('cli-razon').value = d.razonSocial || '';
+  $('cli-ruc').value = d.ruc || '';
+  $('cli-tel').value = d.telefono || '';
+  $('cli-dir').value = d.direccion || '';
+  $('cli-servicio').value = d.servicioFactura || '';
+  $('cli-tarifa').value = d.tarifa || '';
+  $('cli-notas').value = d.notas || '';
+  $('cliente-titulo').textContent = nombre ? 'Ficha de cliente' : 'Nuevo cliente';
+  $('cli-eliminar').classList.toggle('hidden', !(nombre && clientesDB[nombre]));
+  const m = $('modal-cliente'); m.classList.remove('hidden'); m.classList.add('flex');
+}
+function cerrarCliente() { const m = $('modal-cliente'); m.classList.add('hidden'); m.classList.remove('flex'); }
+function guardarCliente() {
+  const orig = $('cli-orig').value, nombre = $('cli-nombre').value.trim();
+  if (!nombre) { toast('Poné el nombre del cliente'); return; }
+  if (nombre !== orig && clientesDB[nombre]) { toast('Ya existe un cliente con ese nombre'); return; }
+  const data = {
+    nombre, razonSocial: $('cli-razon').value.trim(), ruc: $('cli-ruc').value.trim(), telefono: $('cli-tel').value.trim(),
+    direccion: $('cli-dir').value.trim(), servicioFactura: $('cli-servicio').value.trim(),
+    tarifa: parseFloat($('cli-tarifa').value) || 0, notas: $('cli-notas').value.trim()
+  };
+  if (orig && orig !== nombre) {                       // renombrar: mantiene vinculados laburos y facturas
+    delete clientesDB[orig]; delete clientesRuc[orig];
+    laburos.forEach(l => { if ((l.cliente || '').trim() === orig) l.cliente = nombre; });
+    facturasDB.forEach(f => { if (f.cliente === orig) f.cliente = nombre; });
+  }
+  if (!data.ruc) delete clientesRuc[nombre];
+  clientesDB[nombre] = data;
+  guardar(); cerrarCliente(); renderFacturasUI(); renderLaburos(); toast('Cliente guardado ✓');
+}
+function eliminarCliente() {
+  const n = $('cli-orig').value; if (!n) return;
+  if (!confirm('¿Borrar la ficha de ' + n + '? Los laburos y facturas se mantienen.')) return;
+  delete clientesDB[n]; delete clientesRuc[n];
+  guardar(); cerrarCliente(); renderFacturasUI(); toast('Ficha borrada');
+}
+/* Al elegir un cliente en un laburo nuevo, completa la tarifa habitual */
+function autocompletarCliente() {
+  const d = clientesDB[$('laburo-cliente').value.trim()];
+  if (d && d.tarifa && !$('laburo-monto').value) { $('laburo-monto').value = d.tarifa; toast('Tarifa habitual cargada'); }
+}
+
+/* ---- Historial de facturas ---- */
+function guardarFacturaHistorial(datos) {
+  const clave = datos.cliente + '|' + datos.desde + '|' + datos.hasta;
+  // Solo se actualiza la factura de esa semana si todavía NO se envió; si ya se envió, se crea otra con lo nuevo
+  const existente = facturasDB.find(f => f.clave === clave && (f.estado || 'borrador') === 'borrador');
+  let id;
+  if (existente) { Object.assign(existente, datos, { emision: hoy() }); id = existente.id; }
+  else {
+    const n = Math.max(0, ...facturasDB.map(f => parseInt(String(f.numero || '').replace(/\D/g, ''), 10) || 0)) + 1;
+    id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    facturasDB.push(Object.assign({ id, numero: 'F-' + String(n).padStart(4, '0'), clave, emision: hoy(), estado: 'borrador' }, datos));
+  }
+  guardar();
+  return id;
+}
+function refrescarPreviewFactura() {
+  const b = $('btn-enviada'); if (!b) return;
+  const f = facturasDB.find(x => x.id === ultimaFacturaId);
+  if (!f) { b.classList.add('hidden'); return; }
+  b.classList.remove('hidden');
+  const e = f.estado || 'borrador';
+  if (e === 'borrador') { b.textContent = '✅ Ya la envié (pendiente en 0)'; b.className = 'w-full bg-sky-600 text-white py-2.5 rounded-xl text-sm font-medium'; b.onclick = () => marcarEnviada(f.id); }
+  else if (e === 'enviada') { b.textContent = '✔ Enviada · tocá para deshacer'; b.className = 'w-full bg-slate-100 text-slate-600 py-2.5 rounded-xl text-sm font-medium'; b.onclick = () => deshacerEnvio(f.id); }
+  else { b.textContent = '💰 Cobrada'; b.className = 'w-full bg-emerald-100 text-emerald-700 py-2.5 rounded-xl text-sm font-medium'; b.onclick = null; }
+}
+function verFactura(id) {
+  const f = facturasDB.find(x => x.id === id); if (!f) return;
+  ultimaFacturaId = id; ultimaFacturaTexto = f.texto;
+  $('factura-print').textContent = f.texto;
+  $('factura-preview').classList.remove('hidden');
+  refrescarPreviewFactura();
+  $('factura-preview').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+/* Enviada: los laburos de esa factura dejan de figurar como pendientes (quedan "facturados") */
+function marcarEnviada(id) {
+  const f = facturasDB.find(x => x.id === id);
+  if (!f) { toast('Generá una factura primero'); return; }
+  if ((f.estado || 'borrador') !== 'borrador') { toast('Esa factura ya figura como enviada'); return; }
+  f.estado = 'enviada'; f.enviadaEl = hoy();
+  (f.laburos || []).forEach(lid => { const l = laburos.find(x => x.id === lid); if (l) { l.facturaId = f.id; if (l.estado === 'pendiente') l.estado = 'facturado'; } });
+  guardar(); renderLaburos(); renderFacturasUI(); refrescarPreviewFactura();
+  toast('Enviada ✓ · Pendiente de ' + f.cliente + ' en 0');
+}
+function deshacerEnvio(id) {
+  const f = facturasDB.find(x => x.id === id); if (!f || (f.estado || 'borrador') !== 'enviada') return;
+  f.estado = 'borrador'; delete f.enviadaEl;
+  laburos.forEach(l => { if (l.facturaId === id) { delete l.facturaId; if (l.estado === 'facturado') l.estado = 'pendiente'; } });
+  guardar(); renderLaburos(); renderFacturasUI(); refrescarPreviewFactura(); toast('Envío deshecho');
+}
+function marcarFacturaCobrada(id) {
+  const f = facturasDB.find(x => x.id === id); if (!f) return;
+  f.estado = 'cobrada'; f.cobradaEl = hoy();
+  laburos.forEach(l => { if (l.facturaId === id) l.estado = 'pagado'; });
+  guardar(); renderLaburos(); renderFacturasUI(); refrescarPreviewFactura(); toast('Cobrada 💰');
+}
+function eliminarFactura(id) {
+  const f = facturasDB.find(x => x.id === id); if (!f) return;
+  if (!confirm('¿Borrar la factura ' + f.numero + ' de ' + f.cliente + '?')) return;
+  laburos.forEach(l => { if (l.facturaId === id) { delete l.facturaId; if (l.estado === 'facturado') l.estado = 'pendiente'; } });
+  facturasDB = facturasDB.filter(x => x.id !== id);
+  if (ultimaFacturaId === id) { ultimaFacturaId = null; refrescarPreviewFactura(); }
+  guardar(); renderLaburos(); renderFacturasUI(); toast('Factura borrada');
+}
+/* Al volver de WhatsApp, pregunta si ya se envió */
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || !envioPendiente) return;
+  const id = envioPendiente; envioPendiente = null;
+  const f = facturasDB.find(x => x.id === id);
+  if (f && (f.estado || 'borrador') === 'borrador' && confirm('¿Ya enviaste la factura de ' + f.cliente + '?\nSi aceptás, lo pendiente de ese cliente queda en 0.')) marcarEnviada(id);
+});
+
+function renderFacturasUI() {
+  const sel = $('factura-cliente');
+  const clientes = obtenerClientes();
+  const actual = sel.value;
+  sel.innerHTML = '<option value="">— Seleccioná un cliente —</option>' + clientes.map(c => '<option value="' + attr(c) + '">' + esc(c) + '</option>').join('');
+  if (actual && clientes.includes(actual)) sel.value = actual;
+  if (!$('factura-desde').value) setPeriodo('semana');
+  if (!$('factura-emisor').value) $('factura-emisor').value = config.emisor || 'Rufo Ferreira';
+
+  /* Clientes */
+  const q = ($('buscar-cliente').value || '').toLowerCase().trim();
+  const lista = $('lista-clientes'), sin = $('sin-clientes');
+  const visibles = clientes.filter(c => {
+    if (!q) return true;
+    const d = clientesDB[c] || {};
+    return [c, d.razonSocial, d.ruc, d.telefono].join(' ').toLowerCase().includes(q);
+  });
+  if (clientes.length === 0) { lista.innerHTML = ''; sin.classList.remove('hidden'); }
+  else {
+    sin.classList.add('hidden');
+    lista.innerHTML = visibles.length ? visibles.map(c => {
+      const d = clientesDB[c] || {};
+      const labs = laburos.filter(l => (l.cliente || '').trim() === c);
+      const pendMonto = labs.filter(l => l.estado === 'pendiente').reduce((s, l) => s + (l.monto || 0), 0);
+      const factMonto = labs.filter(l => l.estado === 'facturado').reduce((s, l) => s + (l.monto || 0), 0);
+      const wa = telWa(d.telefono);
+      return '<div class="p-3 bg-slate-50 rounded-xl"><div class="flex justify-between items-start gap-2"><div class="min-w-0">' +
+        '<p class="font-medium truncate">' + esc(c) + '</p>' +
+        (d.razonSocial ? '<p class="text-xs text-slate-500 truncate">' + esc(d.razonSocial) + '</p>' : '') +
+        '<p class="text-xs text-slate-500">' + (d.ruc ? 'RUC ' + esc(d.ruc) : '<span class="text-amber-600">Sin RUC</span>') + (d.telefono ? ' · ' + esc(d.telefono) : '') + '</p>' +
+        '<p class="text-xs text-slate-400">' + labs.length + ' laburo(s)' + (factMonto ? ' · facturado por cobrar ' + fmt(factMonto) : '') + (d.tarifa ? ' · tarifa ' + fmt(d.tarifa) : '') + '</p></div>' +
+        '<div class="text-right shrink-0"><p class="font-bold text-sm ' + (pendMonto ? 'text-amber-600' : 'text-slate-400') + '">' + fmt(pendMonto) + '</p><p class="text-xs text-slate-400">pendiente</p></div></div>' +
+        '<div class="flex gap-2 mt-2"><button data-n="' + attr(c) + '" onclick="seleccionarCliente(this.dataset.n)" class="flex-1 text-xs bg-primary-50 text-primary-700 py-1.5 rounded-lg font-medium">Facturar</button>' +
+        '<button data-n="' + attr(c) + '" onclick="abrirCliente(this.dataset.n)" class="flex-1 text-xs bg-white border border-slate-200 text-slate-600 py-1.5 rounded-lg font-medium">Ficha</button>' +
+        (wa ? '<a href="' + wa + '" target="_blank" rel="noopener" class="px-4 text-xs bg-emerald-50 text-emerald-700 py-1.5 rounded-lg font-medium flex items-center">💬</a>' : '') +
+        '</div></div>';
+    }).join('') : '<p class="text-center text-slate-400 text-xs py-3">Sin resultados</p>';
+  }
+
+  /* Facturas emitidas */
+  const lf = $('lista-facturas'), sf = $('sin-facturas'), rf = $('resumen-facturas');
+  if (!facturasDB.length) { lf.innerHTML = ''; rf.textContent = ''; sf.classList.remove('hidden'); }
+  else {
+    sf.classList.add('hidden');
+    const est = f => f.estado || 'borrador';
+    const porCobrar = facturasDB.filter(f => est(f) === 'enviada').reduce((s, f) => s + (f.total || 0), 0);
+    rf.textContent = facturasDB.length + ' factura(s) · Facturado ' + fmt(facturasDB.filter(f => est(f) !== 'borrador').reduce((s, f) => s + (f.total || 0), 0)) + ' · Por cobrar ' + fmt(porCobrar);
+    const insignia = e => e === 'cobrada' ? '<span class="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Cobrada</span>'
+                        : e === 'enviada' ? '<span class="text-xs bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full">Enviada</span>'
+                        : '<span class="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Sin enviar</span>';
+    const btn = (txt, fn, id, cls) => '<button onclick="' + fn + '(\'' + id + '\')" class="flex-1 text-xs ' + cls + ' py-1.5 rounded-lg font-medium">' + txt + '</button>';
+    const claro = 'bg-primary-50 text-primary-700', borde = 'bg-white border border-slate-200 text-slate-600', rojo = 'bg-white border border-slate-200 text-rose-600';
+    lf.innerHTML = facturasDB.slice().sort((a, b) => (b.emision || '').localeCompare(a.emision || '') || String(b.numero).localeCompare(String(a.numero))).map(f => {
+      const e = est(f);
+      const botones = btn('Ver', 'verFactura', f.id, claro) +
+        (e === 'borrador' ? btn('✅ Enviada', 'marcarEnviada', f.id, 'bg-sky-50 text-sky-700') + btn('Eliminar', 'eliminarFactura', f.id, rojo)
+         : e === 'enviada' ? btn('💰 Cobrada', 'marcarFacturaCobrada', f.id, 'bg-emerald-50 text-emerald-700') + btn('Deshacer', 'deshacerEnvio', f.id, borde)
+         : btn('Eliminar', 'eliminarFactura', f.id, rojo));
+      return '<div class="p-3 bg-slate-50 rounded-xl"><div class="flex justify-between items-start gap-2"><div class="min-w-0">' +
+        '<p class="font-medium truncate">' + esc(f.numero) + ' · ' + esc(f.cliente) + '</p>' +
+        '<p class="text-xs text-slate-500">' + formatearFecha(f.desde) + ' → ' + formatearFecha(f.hasta) + ' · ' + (f.laburos || []).length + ' laburo(s)</p>' +
+        '<p class="text-xs text-slate-400">Emitida ' + formatearFecha(f.emision) + (f.ruc ? ' · RUC ' + esc(f.ruc) : '') + '</p></div>' +
+        '<div class="text-right shrink-0"><p class="font-bold text-primary-700 text-sm">' + fmt(f.total) + '</p><div class="mt-1">' + insignia(e) + '</div></div></div>' +
+        '<div class="flex gap-2 mt-2">' + botones + '</div></div>';
+    }).join('');
+  }
+}
+function seleccionarCliente(nombre) {
+  $('factura-cliente').value = nombre;
+  cargarRucCliente();
+  setPeriodo('semana');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  toast('Cliente seleccionado');
+}
+function cargarRucCliente() {
+  const c = $('factura-cliente').value, d = clientesDB[c] || {};
+  $('factura-ruc').value = d.ruc || clientesRuc[c] || '';
+  $('factura-servicio').value = d.servicioFactura || 'Servicios de CAMARÓGRAFO';
+}
+
+function setPeriodo(tipo) {
+  const hoyD = new Date();
+  let desde, hasta;
+  if (tipo === 'semana') {
+    const day = hoyD.getDay();
+    const diff = day === 0 ? 6 : day - 1;
+    const lunes = new Date(hoyD); lunes.setDate(hoyD.getDate() - diff);
+    const domingo = new Date(lunes); domingo.setDate(lunes.getDate() + 6);
+    desde = iso10(lunes);
+    hasta = iso10(domingo);
+  } else if (tipo === 'mes') {
+    desde = mesActual() + '-01';
+    hasta = iso10(new Date(hoyD.getFullYear(), hoyD.getMonth() + 1, 0));
+  } else {
+    desde = '2020-01-01';
+    hasta = hoy();
+  }
+  $('factura-desde').value = desde;
+  $('factura-hasta').value = hasta;
+}
+
+function generarFactura() {
+  const cliente = $('factura-cliente').value.trim();
+  const ruc = $('factura-ruc').value.trim();
+  const desde = $('factura-desde').value;
+  const hasta = $('factura-hasta').value;
+  const emisor = $('factura-emisor').value.trim() || 'Rufo Ferreira';
+  const servicio = $('factura-servicio').value.trim() || 'Servicios de CAMARÓGRAFO';
+  if (!cliente) { toast('Seleccioná un cliente'); return; }
+  if (!desde || !hasta) { toast('Indicá el período'); return; }
+  const fichaCli = clientesDB[cliente] || (clientesDB[cliente] = { nombre: cliente });
+  if (ruc) { fichaCli.ruc = ruc; clientesRuc[cliente] = ruc; }
+  fichaCli.servicioFactura = servicio; guardar();
+  config.emisor = emisor; guardar();
+
+  const labs = laburos.filter(l => (l.cliente || '').trim() === cliente && l.fecha >= desde && l.fecha <= hasta).sort((a, b) => a.fecha.localeCompare(b.fecha));
+  if (labs.length === 0) { toast('No hay laburos de este cliente en el período'); $('factura-preview').classList.add('hidden'); return; }
+
+  const subtotal = labs.reduce((s, l) => s + (l.monto || 0), 0);
+  const iva = Math.round(subtotal * 0.11);
+  const total = subtotal + iva;
+  const fechaEmision = new Date().toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const detalle = labs.map((l, i) => {
+    const f = formatearFecha(l.fecha);
+    return '  ' + (i + 1) + '. ' + f + (l.hora ? ' ' + l.hora : '') + ' — ' + (l.desc || 'Servicio') + ' ........ ' + fmt(l.monto);
+  }).join('\n');
+
+  const texto = 'Cliente: ' + (fichaCli.razonSocial || cliente) + '\nRUC: ' + (ruc || '—') + '\nFecha de Emisión: ' + fechaEmision + '\n\nDETALLE DEL SERVICIO\nDescripción:\n' + servicio + ' **(' + emisor + ')**\n\nMONTAJE Y OPERACIÓN\n- Descripción:\n' + detalle + '\n\nValor de venta (sin IVA): ' + fmt(subtotal) + '\nIVA 11%: ' + fmt(iva) + '\nTOTAL A PAGAR (IVA incluido): ' + fmt(total) + '\n\nSon: ' + montoEnLetras(total) + '.';
+
+  ultimaFacturaTexto = texto;
+  guardarFacturaHistorial({ cliente, ruc: ruc || fichaCli.ruc || '', desde, hasta, subtotal, iva, total, texto, servicio, laburos: labs.map(l => l.id) });
+  $('factura-print').textContent = texto;
+  $('factura-preview').classList.remove('hidden');
+  toast('Factura generada ✓');
+  renderFacturasUI();
+}
+function copiarFactura() {
+  if (!ultimaFacturaTexto) return;
+  navigator.clipboard.writeText(ultimaFacturaTexto).then(() => toast('Copiado ✓')).catch(() => {
+    const ta = document.createElement('textarea'); ta.value = ultimaFacturaTexto; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); toast('Copiado ✓');
+  });
+}
+
+function renderLaburos() {
+  const lista = $('lista-laburos'), hoyEl = $('laburos-hoy'), sinHoy = $('sin-hoy'), sinLaburos = $('sin-laburos');
+  const deHoy = laburos.filter(l => l.fecha === hoy()).sort((a, b) => (a.hora || '').localeCompare(b.hora || ''));
+  hoyEl.innerHTML = '';
+  if (deHoy.length === 0) sinHoy.classList.remove('hidden');
+  else { sinHoy.classList.add('hidden'); deHoy.forEach(l => hoyEl.appendChild(crearCardLaburo(l, true))); }
+
+  let filtrados = [...laburos];
+  if (filtroActual === 'pendiente') filtrados = filtrados.filter(l => l.estado === 'pendiente');
+  if (filtroActual === 'pagado') filtrados = filtrados.filter(l => l.estado === 'pagado');
+  if (filtroActual === 'futuros') filtrados = filtrados.filter(l => l.fecha >= hoy());
+  filtrados.sort((a, b) => b.fecha.localeCompare(a.fecha) || (a.hora || '').localeCompare(b.hora || ''));
+
+  lista.innerHTML = '';
+  if (filtrados.length === 0) sinLaburos.classList.remove('hidden');
+  else { sinLaburos.classList.add('hidden'); filtrados.forEach(l => lista.appendChild(crearCardLaburo(l))); }
+  actualizarResumen();
+  actualizarDatalistClientes();
+}
+function crearCardLaburo(l, esHoy) {
+  const div = document.createElement('div');
+  div.className = 'card-enter bg-white rounded-2xl shadow-sm border p-4 ' + (esHoy ? 'border-primary-300 ring-1 ring-primary-100' : 'border-slate-100');
+  const estadoBadge = l.estado === 'pagado'
+    ? '<span class="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">Pagado</span>'
+    : '<span class="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium badge">Pendiente</span>';
+  div.innerHTML = '<div class="flex justify-between items-start gap-2"><div class="flex-1 min-w-0"><p class="font-semibold text-slate-800 truncate">' + esc(l.desc || 'Sin descripción') + '</p><p class="text-xs text-slate-500 mt-0.5">' + (l.cliente ? esc(l.cliente) + ' · ' : '') + formatearFecha(l.fecha) + (l.hora ? ' · ' + l.hora : '') + '</p>' + (l.notas ? '<p class="text-xs text-slate-400 mt-1 truncate">' + esc(l.notas) + '</p>' : '') + '</div><div class="text-right shrink-0"><p class="font-bold text-primary-700">' + fmt(l.monto) + '</p><div class="mt-1">' + estadoBadge + '</div></div></div><div class="flex gap-2 mt-3">' + (l.estado === 'pendiente' ? '<button onclick="marcarPagado(\'' + l.id + '\')" class="flex-1 text-xs bg-emerald-50 text-emerald-700 py-1.5 rounded-lg font-medium">✓ Marcar pagado</button>' : '') + '<button onclick="editarLaburo(\'' + l.id + '\')" class="flex-1 text-xs bg-slate-50 text-slate-600 py-1.5 rounded-lg font-medium">Editar</button></div>';
+  return div;
+}
+function formatearFecha(f) {
+  if (!f) return '';
+  return new Date(f + 'T12:00:00').toLocaleDateString('es-PY', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function filtrarLaburos(f) {
+  filtroActual = f;
+  document.querySelectorAll('.filtro-laburo').forEach(btn => { btn.classList.remove('active', 'bg-primary-100', 'text-primary-800'); btn.classList.add('bg-slate-100', 'text-slate-600'); });
+  event.target.classList.add('active', 'bg-primary-100', 'text-primary-800');
+  event.target.classList.remove('bg-slate-100', 'text-slate-600');
+  renderLaburos();
+}
+function abrirModalLaburo(id) {
+  estadoModal = 'pendiente';
+  $('laburo-id').value = ''; $('laburo-cliente').value = ''; $('laburo-desc').value = '';
+  $('laburo-fecha').value = hoy(); $('laburo-hora').value = ''; $('laburo-monto').value = ''; $('laburo-notas').value = '';
+  $('modal-titulo').textContent = 'Nuevo laburo'; $('btn-eliminar').classList.add('hidden'); setEstado('pendiente');
+  actualizarDatalistClientes();
+  if (id) {
+    const l = laburos.find(x => x.id === id);
+    if (l) {
+      $('laburo-id').value = l.id; $('laburo-cliente').value = l.cliente || ''; $('laburo-desc').value = l.desc || '';
+      $('laburo-fecha').value = l.fecha || ''; $('laburo-hora').value = l.hora || ''; $('laburo-monto').value = l.monto || '';
+      $('laburo-notas').value = l.notas || ''; estadoModal = l.estado; setEstado(l.estado);
+      $('modal-titulo').textContent = 'Editar laburo'; $('btn-eliminar').classList.remove('hidden');
+    }
+  }
+  const modal = $('modal-laburo'); modal.classList.remove('hidden'); modal.classList.add('flex');
+}
+function cerrarModal() { const m = $('modal-laburo'); m.classList.add('hidden'); m.classList.remove('flex'); }
+function setEstado(e) {
+  estadoModal = e;
+  if (e === 'pendiente') {
+    $('btn-pendiente').className = 'flex-1 py-2.5 rounded-xl text-sm font-medium border-2 border-amber-400 bg-amber-50 text-amber-700';
+    $('btn-pagado').className = 'flex-1 py-2.5 rounded-xl text-sm font-medium border-2 border-slate-200 text-slate-500';
+  } else {
+    $('btn-pagado').className = 'flex-1 py-2.5 rounded-xl text-sm font-medium border-2 border-emerald-400 bg-emerald-50 text-emerald-700';
+    $('btn-pendiente').className = 'flex-1 py-2.5 rounded-xl text-sm font-medium border-2 border-slate-200 text-slate-500';
+  }
+}
+function guardarLaburo() {
+  const id = $('laburo-id').value;
+  const data = {
+    id: id || Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    cliente: $('laburo-cliente').value.trim(),
+    desc: $('laburo-desc').value.trim() || 'Laburo sin nombre',
+    fecha: $('laburo-fecha').value, hora: $('laburo-hora').value,
+    monto: parseFloat($('laburo-monto').value) || 0, estado: estadoModal,
+    notas: $('laburo-notas').value.trim(),
+    created: id ? (laburos.find(l => l.id === id)?.created || Date.now()) : Date.now()
+  };
+  if (!data.fecha) { toast('Poné una fecha'); return; }
+  if (id) { const idx = laburos.findIndex(l => l.id === id); if (idx >= 0) laburos[idx] = data; }
+  else laburos.push(data);
+  guardar(); cerrarModal(); renderLaburos(); toast(id ? 'Actualizado' : 'Guardado ✓'); programarNotificaciones();
+}
+function editarLaburo(id) { abrirModalLaburo(id); }
+function eliminarLaburo() {
+  if (!confirm('¿Eliminar?')) return;
+  laburos = laburos.filter(l => l.id !== $('laburo-id').value);
+  guardar(); cerrarModal(); renderLaburos(); toast('Eliminado');
+}
+function marcarPagado(id) {
+  const l = laburos.find(x => x.id === id);
+  if (l) { l.estado = 'pagado'; guardar(); renderLaburos(); toast('Pagado 💰'); }
+}
+
+/* ===== LECTOR INTELIGENTE DE MENSAJES (WhatsApp) ===== */
+const PARSE_DIAS = { domingo:0, lunes:1, martes:2, miercoles:3, jueves:4, viernes:5, sabado:6 };
+const PARSE_MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const PARSE_CIUDADES = ['mariano roque alonso','fernando de la mora','pedro juan caballero','ciudad del este','san bernardino','coronel oviedo','villa hayes','san lorenzo','san antonio','villa elisa','encarnacion','guarambare','villarrica','asuncion','capiata','ypacarai','itaugua','caacupe','lambare','aregua','limpio','nemby','trinidad','luque','ypane'];
+const PARSE_TILDES = { asuncion:'Asunción', lambare:'Lambaré', aregua:'Areguá', capiata:'Capiatá', nemby:'Ñemby', itaugua:'Itauguá', encarnacion:'Encarnación', guarambare:'Guarambaré', ypacarai:'Ypacaraí', caacupe:'Caacupé', ypane:'Ypané' };
+
+
+/* Convierte números dichos en voz ("trescientos cincuenta mil", "diez y media") a dígitos */
+const PARSE_NUM = { cero:0, un:1, uno:1, una:1, dos:2, tres:3, cuatro:4, cinco:5, seis:6, siete:7, ocho:8, nueve:9, diez:10, once:11, doce:12, trece:13, catorce:14, quince:15,
+  dieciseis:16, diecisiete:17, dieciocho:18, diecinueve:19, veinte:20, veintiun:21, veintiuno:21, veintiuna:21, veintidos:22, veintitres:23, veinticuatro:24, veinticinco:25,
+  veintiseis:26, veintisiete:27, veintiocho:28, veintinueve:29, treinta:30, cuarenta:40, cincuenta:50, sesenta:60, setenta:70, ochenta:80, noventa:90,
+  cien:100, ciento:100, doscientos:200, doscientas:200, trescientos:300, trescientas:300, cuatrocientos:400, cuatrocientas:400, quinientos:500, quinientas:500,
+  seiscientos:600, seiscientas:600, setecientos:700, setecientas:700, ochocientos:800, ochocientas:800, novecientos:900, novecientas:900, mil:1000, millon:1e6, millones:1e6 };
+function palabrasANumeros(texto) {
+  const nw = s => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const parts = texto.split(/([A-Za-zÁÉÍÓÚÑáéíóúñü]+)/);
+  const esEsp = s => /^\s+$/.test(s);
+  for (let i = 1; i < parts.length; i += 2) {
+    const v0 = PARSE_NUM[nw(parts[i])];
+    if (v0 === undefined) continue;
+    let total = 0, cur = 0, last = 0, fuerte = false, fin = i, n = 0;
+    const aceptar = (v, palabra) => {
+      if (v === 1000) { total += (cur || 1) * 1000; cur = 0; last = 0; }
+      else if (v === 1e6) { total += (cur || 1) * 1e6; cur = 0; last = 0; }
+      else { cur += v; last = v; }
+      if (!/^(un|uno|una)$/.test(palabra)) fuerte = true;
+      n++;
+    };
+    aceptar(v0, nw(parts[i]));
+    let j = i + 2;
+    while (j < parts.length && esEsp(parts[j - 1])) {
+      const pal = nw(parts[j]);
+      if (pal === 'y' && j + 2 < parts.length && esEsp(parts[j + 1])) {
+        const u = PARSE_NUM[nw(parts[j + 2])];
+        if (u >= 1 && u <= 9 && last >= 20 && last <= 90 && last % 10 === 0) { aceptar(u, nw(parts[j + 2])); fin = j + 2; j += 4; continue; }
+        break;
+      }
+      const v = PARSE_NUM[pal];
+      if (v === undefined) break;
+      let ok;
+      if (v === 1000 || v === 1e6) ok = cur > 0;
+      else if (v >= 100) ok = last === 0;
+      else if (v >= 10) ok = last === 0 || (last >= 100 && last % 100 === 0);
+      else ok = v >= 1 && (last === 0 || (last >= 100 && last % 100 === 0));
+      if (!ok) break;
+      aceptar(v, pal); fin = j; j += 2;
+    }
+    const unica = (n === 1 && /^(un|uno|una)$/.test(nw(parts[i])));
+    const hora1 = unica && i >= 4 && nw(parts[i - 2]) === 'la' && nw(parts[i - 4]) === 'a';
+    const sigue = fin + 2 < parts.length ? nw(parts[fin + 2]) : '';
+    const milGracias = n === 1 && nw(parts[i]) === 'mil' && /^(gracias|veces|cosas)$/.test(sigue);
+    if ((fuerte || hora1) && !milGracias) {
+      parts[i] = String(total + cur);
+      for (let k = i + 1; k <= fin; k++) parts[k] = '';
+    }
+    i = fin;
+  }
+  return parts.join('');
+}
+
+function parsearTextoLaburo(texto, opts) {
+  opts = opts || {};
+  const clientes = (opts.clientes || []).slice().sort((a, b) => b.length - a.length);
+  const base = opts.hoy ? new Date(opts.hoy) : new Date();
+  const hoyD = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 12);
+  const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const norm = s => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const titulo = s => s.split(' ').map(x => x.charAt(0).toUpperCase() + x.slice(1).toLowerCase()).join(' ');
+  const t = palabrasANumeros(texto.replace(/\s+/g, ' ').trim());
+  const w0 = norm(t);
+  let w = w0;
+  const r = { cliente: null, fecha: null, hora: null, monto: null, lugar: null, desc: '', notas: '' };
+
+  /* ---- 1) HORA ---- */
+  let periodo = null;
+  const pm = w.match(/\b(?:de|por|en|a)\s+la\s+(manana|tarde|noche)\b/);
+  if (pm) { periodo = pm[1]; w = w.replace(pm[0], ' '); }
+  else if (/\bmediodia\b/.test(w)) periodo = 'mediodia';
+
+  let h = null, min = '00', hm, ap = null;
+  if ((hm = w.match(/\b(\d{1,2})\s*[:h]\s*(\d{2})(?:\s*(am|pm)\b)?/))) { h = +hm[1]; min = hm[2]; ap = hm[3]; }
+  else if ((hm = w.match(/\b(?:a las|a la|para las|para la|desde las)\s+(\d{1,2})(?:\s+(y media|y cuarto|menos cuarto))?(?:\s*(am|pm)\b|\s*(?:hs|h|horas)\b)?/))) {
+    h = +hm[1]; ap = hm[3];
+    if (hm[2] === 'y media') min = '30'; else if (hm[2] === 'y cuarto') min = '15'; else if (hm[2] === 'menos cuarto') { h = h <= 1 ? 12 : h - 1; min = '45'; }
+  }
+  else if ((hm = w.match(/\b(\d{1,2})\s*(?:hs|horas)\b/))) { h = +hm[1]; }
+  if (h !== null && h < 24) {
+    if (ap === 'pm' && h < 12) h += 12;
+    else if (ap === 'am' && h === 12) h = 0;
+    else if ((periodo === 'tarde' || periodo === 'noche') && h < 12) h += 12;
+    else if (periodo === 'manana' && h === 12) h = 0;
+    r.hora = String(h).padStart(2, '0') + ':' + min;
+    w = w.replace(hm[0], ' ');
+  } else if (periodo === 'mediodia') r.hora = '12:00';
+
+  /* ---- 2) FECHA ---- */
+  const reDia = new RegExp('\\b(' + Object.keys(PARSE_DIAS).join('|') + ')\\b(?:\\s+(\\d{1,2})\\b)?');
+  const wd = w.match(reDia);
+  let f = null, fm;
+  if ((fm = w.match(/\b(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2,4}))?\b/)) && +fm[1] <= 31 && +fm[2] <= 12) {
+    let y = fm[3] ? +fm[3] : hoyD.getFullYear(); if (y < 100) y += 2000;
+    f = new Date(y, +fm[2] - 1, +fm[1], 12);
+    if (!fm[3] && f < hoyD) f.setFullYear(f.getFullYear() + 1);
+    w = w.replace(fm[0], ' ');
+  } else if ((fm = w.match(new RegExp('\\b(\\d{1,2})\\s*(?:de\\s+)?(' + PARSE_MESES.join('|') + ')(?:\\s*(?:de|del)?\\s*(\\d{4}))?\\b')))) {
+    let y = fm[3] ? +fm[3] : hoyD.getFullYear();
+    f = new Date(y, PARSE_MESES.indexOf(fm[2]), +fm[1], 12);
+    if (!fm[3] && f < hoyD) f.setFullYear(f.getFullYear() + 1);
+    w = w.replace(fm[0], ' ');
+  } else if (/\bpasado manana\b/.test(w)) { f = new Date(hoyD); f.setDate(f.getDate() + 2); w = w.replace(/\bpasado manana\b/, ' '); }
+  else if (/\bmanana\b/.test(w)) { f = new Date(hoyD); f.setDate(f.getDate() + 1); w = w.replace(/\bmanana\b/, ' '); }
+  else if (/\bhoy\b/.test(w)) { f = new Date(hoyD); w = w.replace(/\bhoy\b/, ' '); }
+  else if (wd) {
+    const objetivo = PARSE_DIAS[wd[1]];
+    if (wd[2]) {                                   // "martes 06": día del mes que coincida con el día de semana
+      for (let k = 0; k < 2 && !f; k++) {
+        const c = new Date(hoyD.getFullYear(), hoyD.getMonth() + k, +wd[2], 12);
+        if (c >= hoyD && c.getDay() === objetivo) f = c;
+      }
+    }
+    if (!f) {                                      // solo "jueves": el próximo jueves
+      let diff = (objetivo - hoyD.getDay() + 7) % 7; if (diff === 0) diff = 7;
+      f = new Date(hoyD); f.setDate(f.getDate() + diff);
+    }
+  }
+  if (wd) w = w.replace(reDia, ' ');
+  if (f && !isNaN(f)) r.fecha = iso(f);
+
+  /* ---- 3) MONTO ---- */
+  const mult = u => !u ? 1 : /^(millon|millones|palo|palos)$/.test(u) ? 1e6 : 1e3;
+  const aNum = (s, u) => {
+    const n = /^\d{1,3}(?:[.,]\d{3})+$/.test(s) ? parseInt(s.replace(/[.,]/g, ''), 10) : parseFloat(s.replace(',', '.'));
+    return n * mult(u);
+  };
+  const reNum = '(\\d+(?:[.,]\\d+)*)\\s*(millones|millon|mil|k|lucas|palos|palo)?\\b';
+  const reClave = new RegExp('(?:monto|total|precio|valor|cobro|pago|presupuesto|cuesta|sale|tarifa|honorarios?)\\s*:?\\s*(?:de\\s+)?(?:gs\\.?|g\\.|guaranies|₲|\\$)?\\s*' + reNum, 'g');
+  const reGen = new RegExp('(gs\\.?|g\\.|₲|\\$)?\\s*' + reNum, 'g');
+  const valido = n => !isNaN(n) && n >= 1000 && n <= 1e9;
+  let mm, hallado = null;
+  while (!hallado && (mm = reClave.exec(w))) {
+    const n = aNum(mm[1], mm[2]);
+    if (valido(n)) hallado = { n, texto: mm[0] };
+  }
+  while (!hallado && (mm = reGen.exec(w))) {
+    const tok = mm[2], n = aNum(tok, mm[3]);
+    if (/^0\d{6,}/.test(tok)) continue;                                   // teléfono
+    if (/^(19|20)\d{2}$/.test(tok) && !mm[3] && !mm[1]) continue;         // año suelto
+    const prev = w.slice(Math.max(0, mm.index - 20), mm.index);
+    if (/(tel|cel|wsp|whatsapp|nro|numero|\+)[\d\s().-]{0,14}$/.test(prev)) continue;
+    if (valido(n)) hallado = { n, texto: mm[0] };
+  }
+  if (hallado) { r.monto = Math.round(hallado.n); w = w.replace(hallado.texto, ' '); }
+
+  /* ---- 4) CLIENTE ---- */
+  const esRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const aparece = nombre => { const n = norm(nombre).trim(); return n.length > 0 && new RegExp('(^|[^a-z0-9])' + esRe(n) + '($|[^a-z0-9])').test(w0); };
+  for (const c of clientes) { if (aparece(c)) { r.cliente = c; break; } }
+  if (!r.cliente) for (const [a, c] of (opts.alias || [])) { if (aparece(a)) { r.cliente = c; break; } }
+  if (!r.cliente) {
+    const stop = new Set(['yo','ya','no','que','si','aca','aqui','quien','el','la','tu','un','una','muy','recien','nuevo','tal','hola','buenas']);
+    const propios = ['rufo','ruffo','rufino','ferreira'].concat((opts.propios || []).join(' ').split(/\s+/).map(norm)).filter(Boolean);
+    const ok = n => { const k = norm(n); return k.length >= 3 && !stop.has(k) && !propios.includes(k) && !(k in PARSE_DIAS) && !PARSE_MESES.includes(k); };
+    const N = '[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+';
+    const pats = [
+      new RegExp('\\b[Cc]liente\\s*[:\\-]?\\s*(' + N + '|[a-záéíóúñ]+)(?:\\s+(' + N + '))?'),
+      new RegExp('\\b(?:[Ss]oy|[Hh]abla|[Mm]i nombre es|[Mm]e llamo|[Tt]e escribe|[Tt]e habla)\\s+(?:el\\s+|la\\s+)?(' + N + '|[a-záéíóúñ]{3,})(?:\\s+(' + N + '))?'),
+      new RegExp('\\b(' + N + ')(?:\\s(' + N + '))?\\s+(?:soy|habla|te escribe)\\b'),
+      new RegExp('\\b([a-záéíóúñ]{3,})()\\s+soy\\b'),
+      new RegExp('\\b(?:[Pp]ara|[Cc]on|[Dd]e parte de)\\s+(?:el\\s+|la\\s+)?(' + N + ')(?:\\s+(' + N + '))?')
+    ];
+    for (const p of pats) {
+      const m = t.match(p);
+      if (m && ok(m[1]) && !PARSE_CIUDADES.includes(norm(m[1]))) {
+        r.cliente = titulo(m[1]) + (m[2] && ok(m[2]) ? ' ' + m[2] : '');
+        break;
+      }
+    }
+  }
+
+  /* ---- 5) LUGAR ---- */
+  const ciudades = new RegExp('\\b(?:en|a|hacia|por|desde)\\s+(?:el\\s+|la\\s+)?(' + PARSE_CIUDADES.join('|') + ')\\b');
+  let lm;
+  if ((lm = w0.match(ciudades))) r.lugar = PARSE_TILDES[lm[1]] || titulo(lm[1]);
+  else if ((lm = t.match(/\b(?:[Ee]n|[Hh]acia)\s+((?:[Ee]l |[Ll]a )?[A-ZÁÉÍÓÚÑ][\wáéíóúñ]*(?:\s+(?:de |del |la |el |los )?[A-ZÁÉÍÓÚÑ][\wáéíóúñ]*){0,3})/))) {
+    const k = norm(lm[1]);
+    if (!(k in PARSE_DIAS) && !PARSE_MESES.includes(k) && k !== norm(r.cliente || '')) r.lugar = lm[1].trim();
+  } else if ((lm = t.match(/\b(?:[Ll]ugar|[Dd]irecci[oó]n|[Uu]bicaci[oó]n|[Ll]ocal)\s*[:\-]\s*([^,.;\n]{3,50})/))) r.lugar = lm[1].trim();
+
+  /* ---- 6) DESCRIPCIÓN ---- */
+  let tipo = null, sm;
+  if ((sm = t.toLowerCase().match(/\b(?:laburo|trabajo|servicio|cobertura|evento|sesi[oó]n)\s+(?:de|del|para)\s+([a-záéíóúñ ]{3,28}?)(?=[,.;:]|\s+(?:en|a|el|la|monto|con|que|por|para|desde|de la)\b|$)/))) {
+    const k = norm(sm[1]);
+    if (!(k in PARSE_DIAS) && !PARSE_MESES.includes(k) && !/^(hoy|manana)$/.test(k)) tipo = 'Laburo de ' + sm[1].trim();
+  }
+  if (!tipo) {
+    const mapa = [[/transmision|streaming|en vivo/, 'Transmisión'], [/grabacion|grabar/, 'Grabación'], [/filmacion|filmar/, 'Filmación'],
+      [/\bfotos?\b|fotografia/, 'Fotografía'], [/cobertura/, 'Cobertura'], [/edicion|editar|montaje/, 'Edición'], [/casamiento|boda/, 'Casamiento'],
+      [/cumple/, 'Cumpleaños'], [/\bevento\b/, 'Evento'], [/\bvideo\b/, 'Video'], [/camara/, 'Cámara'], [/reunion/, 'Reunión'], [/\bdron\b/, 'Dron']];
+    for (const [re, nombre] of mapa) { if (re.test(w0)) { tipo = nombre; break; } }
+  }
+  r.desc = (tipo || 'Laburo') + (r.lugar ? ' en ' + r.lugar : '');
+
+  /* ---- 7) NOTAS (guarda todo el mensaje para no perder nada) ---- */
+  r.notas = (r.lugar ? 'Lugar: ' + r.lugar + ' · ' : '') + 'WhatsApp: ' + t.slice(0, 400);
+  return r;
+}
+
+let parseActual = null;
+function limpiarMensaje() { $('whatsapp-input').value = ''; $('parse-result').classList.add('hidden'); parseActual = null; }
+function parsearWhatsApp(silencioso) {
+  const texto = $('whatsapp-input').value.trim();
+  const box = $('parse-result');
+  if (!texto) { if (silencioso !== true) toast('Pegá un mensaje'); box.classList.add('hidden'); parseActual = null; return; }
+  const r = parsearTextoLaburo(texto, { clientes: obtenerClientes(), propios: [(config && config.emisor) || ''],
+    alias: Object.values(clientesDB).filter(d => d.razonSocial).map(d => [d.razonSocial, d.nombre]) });
+  const ficha = r.cliente ? clientesDB[r.cliente] : null;
+  if (ficha && !r.monto && ficha.tarifa) { r.monto = ficha.tarifa; r.montoHabitual = true; }
+  parseActual = r;
+  const fila = (ico, et, val) => '<p>' + ico + ' ' + et + ': ' + (val ? '<strong>' + esc(String(val)) + '</strong>' : '<span class="text-slate-400">No detectado</span>') + '</p>';
+  const fechaTxt = r.fecha ? formatearFecha(r.fecha) + (r.fecha.slice(0, 4) !== String(new Date().getFullYear()) ? ' ' + r.fecha.slice(0, 4) : '') : '';
+  box.classList.remove('hidden');
+  box.innerHTML = '<p class="font-medium text-primary-800 mb-2">Datos detectados:</p><div class="space-y-1 text-sm">' +
+    fila('👤', 'Cliente', r.cliente) +
+    (ficha && (ficha.ruc || ficha.razonSocial) ? fila('📇', 'Ficha', [ficha.razonSocial, ficha.ruc && 'RUC ' + ficha.ruc].filter(Boolean).join(' · ')) : '') + fila('📅', 'Fecha', fechaTxt) + fila('🕐', 'Hora', r.hora) +
+    fila('💰', 'Monto', r.monto ? fmt(r.monto) + (r.montoHabitual ? ' (tarifa habitual)' : '') : '') + fila('📍', 'Lugar', r.lugar) + fila('🛠️', 'Trabajo', r.desc) +
+    fila('📝', 'Notas', r.notas.length > 70 ? r.notas.slice(0, 70) + '…' : r.notas) + '</div>' +
+    (r.fecha ? '' : '<p class="text-xs text-amber-600 mt-2">Falta la fecha: se abrirá el formulario para completarla.</p>') +
+    '<button onclick="confirmarParse()" class="mt-3 w-full bg-primary-600 text-white py-2 rounded-xl text-sm font-medium">Confirmar y guardar</button>';
+}
+function confirmarParse() {
+  const data = parseActual;
+  if (!data) return;
+  if (!data.fecha) {
+    toast('Completá la fecha manualmente'); abrirModalLaburo();
+    $('laburo-cliente').value = data.cliente || ''; $('laburo-desc').value = data.desc || '';
+    $('laburo-hora').value = data.hora || ''; $('laburo-monto').value = data.monto || ''; $('laburo-notas').value = data.notas || '';
+    return;
+  }
+  laburos.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), cliente: data.cliente || '', desc: data.desc || 'Laburo', fecha: data.fecha, hora: data.hora || '', monto: data.monto || 0, estado: 'pendiente', notas: data.notas || 'WhatsApp', created: Date.now() });
+  guardar(); $('whatsapp-input').value = ''; $('parse-result').classList.add('hidden'); parseActual = null;
+  renderLaburos(); toast('Importado ✓'); programarNotificaciones();
+}
+/* Detección automática al pegar o escribir */
+(function () {
+  const iniciar = () => {
+    const caja = $('whatsapp-input'); if (!caja) return;
+    let tm;
+    caja.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(() => parsearWhatsApp(true), 500); });
+    caja.addEventListener('paste', () => { clearTimeout(tm); setTimeout(() => parsearWhatsApp(true), 60); });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
+})();
+
+
+function agregarGasto() {
+  const desc = $('gasto-desc').value.trim(), monto = parseFloat($('gasto-monto').value), cat = $('gasto-categoria').value;
+  if (!desc || !monto || monto <= 0) { toast('Completá descripción y monto'); return; }
+  gastos.push({ id: Date.now().toString(36), desc, monto, categoria: cat, fecha: hoy(), created: Date.now() });
+  guardar(); $('gasto-desc').value = ''; $('gasto-monto').value = ''; renderGastos(); actualizarResumen(); toast('Gasto registrado');
+}
+function renderGastos() {
+  const lista = $('lista-gastos'), sin = $('sin-gastos');
+  const delMes = gastos.filter(g => g.fecha.startsWith(mesActual())).sort((a,b) => b.fecha.localeCompare(a.fecha));
+  lista.innerHTML = '';
+  if (delMes.length === 0) sin.classList.remove('hidden');
+  else {
+    sin.classList.add('hidden');
+    delMes.forEach(g => {
+      const div = document.createElement('div');
+      div.className = 'card-enter bg-white rounded-2xl shadow-sm border border-slate-100 p-4 flex justify-between items-center';
+      div.innerHTML = '<div><p class="font-medium text-sm">' + esc(g.desc) + '</p><p class="text-xs text-slate-500">' + g.categoria + ' · ' + formatearFecha(g.fecha) + '</p></div><div class="flex items-center gap-3"><span class="font-bold text-rose-600">' + fmt(g.monto) + '</span><button onclick="eliminarGasto(\'' + g.id + '\')" class="text-slate-400 text-lg">&times;</button></div>';
+      lista.appendChild(div);
+    });
+  }
+}
+function eliminarGasto(id) { gastos = gastos.filter(g => g.id !== id); guardar(); renderGastos(); actualizarResumen(); toast('Eliminado'); }
+
+function actualizarResumen() {
+  const pendientes = laburos.filter(l => l.estado === 'pendiente').reduce((s,l) => s + (l.monto||0), 0);
+  const delMes = laburos.filter(l => l.estado === 'pagado' && l.fecha.startsWith(mesActual())).reduce((s,l) => s + (l.monto||0), 0);
+  const gastosMes = gastos.filter(g => g.fecha.startsWith(mesActual())).reduce((s,g) => s + g.monto, 0);
+  const balance = delMes - gastosMes;
+  $('resumen-pendiente').textContent = fmt(pendientes);
+  $('resumen-mes').textContent = fmt(delMes);
+  $('resumen-balance').textContent = fmt(balance);
+  $('resumen-balance').className = 'font-bold text-lg ' + (balance >= 0 ? 'text-emerald-600' : 'text-rose-600');
+}
+
+function renderAhorro() {
+  const ingresos = laburos.filter(l => l.estado === 'pagado' && l.fecha.startsWith(mesActual())).reduce((s,l) => s + (l.monto||0), 0);
+  const gastosMes = gastos.filter(g => g.fecha.startsWith(mesActual())).reduce((s,g) => s + g.monto, 0);
+  const disponible = ingresos - gastosMes;
+  const pct = ingresos > 0 ? Math.min(100, Math.round((disponible / ingresos) * 100)) : 0;
+  $('ahorro-ingresos').textContent = fmt(ingresos);
+  $('ahorro-gastos').textContent = fmt(gastosMes);
+  $('ahorro-disponible').textContent = fmt(disponible);
+  $('barra-ahorro').style.width = Math.max(0, pct) + '%';
+  $('porcentaje-ahorro').textContent = pct + '% del ingreso disponible';
+
+  const labsMes = laburos.filter(l => l.fecha.startsWith(mesActual()));
+  const labsPag = labsMes.filter(l => l.estado === 'pagado');
+  const ticket = labsPag.length ? Math.round(labsPag.reduce((s,l) => s + l.monto, 0) / labsPag.length) : 0;
+  const clientesMes = new Set(labsMes.map(l => (l.cliente||'').trim()).filter(Boolean)).size;
+  const totalLabs = laburos.length, totalPag = laburos.filter(l => l.estado === 'pagado').length;
+  const tasa = totalLabs ? Math.round((totalPag / totalLabs) * 100) : 0;
+
+  $('stat-laburos-mes').textContent = labsMes.length;
+  $('stat-ticket').textContent = fmt(ticket);
+  $('stat-clientes').textContent = clientesMes;
+  $('stat-cobro').textContent = tasa + '%';
+  $('stat-cobro').className = 'text-2xl font-bold ' + (tasa >= 70 ? 'text-emerald-600' : tasa >= 40 ? 'text-amber-600' : 'text-rose-600');
+
+  renderChartMeses();
+  renderChartClientes();
+  renderChartEstado();
+
+  const analisis = [];
+  if (labsMes.length === 0) analisis.push({ icon: '📭', t: 'Sin actividad este mes', d: 'Todavía no registraste laburos en el mes actual.' });
+  else {
+    const map = {};
+    labsMes.forEach(l => { const c = (l.cliente||'').trim() || 'Sin cliente'; map[c] = (map[c]||0) + (l.monto||0); });
+    const top = Object.entries(map).sort((a,b) => b[1]-a[1])[0];
+    if (top) analisis.push({ icon: '🏆', t: 'Cliente top del mes', d: top[0] + ' te generó ' + fmt(top[1]) + '.' });
+    if (tasa < 50 && totalLabs > 2) analisis.push({ icon: '⚠️', t: 'Cobros atrasados', d: 'Solo cobraste el ' + tasa + '% de tus laburos.' });
+    if (gastosMes > ingresos * 0.5 && ingresos > 0) analisis.push({ icon: '📉', t: 'Gastos elevados', d: 'Los gastos son el ' + Math.round(gastosMes/ingresos*100) + '% de tus ingresos.' });
+    if (ticket > 0) analisis.push({ icon: '📌', t: 'Ticket promedio', d: 'Cada laburo te deja ' + fmt(ticket) + ' en promedio.' });
+  }
+  const pend = laburos.filter(l => l.estado === 'pendiente');
+  if (pend.length) analisis.push({ icon: '⏰', t: pend.length + ' pendiente(s)', d: 'Tenés ' + fmt(pend.reduce((s,l)=>s+l.monto,0)) + ' sin cobrar.' });
+
+  $('analisis-lista').innerHTML = analisis.map(c => '<div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 flex gap-3"><span class="text-2xl">' + c.icon + '</span><div><p class="font-medium text-sm">' + c.t + '</p><p class="text-xs text-slate-500 mt-0.5">' + c.d + '</p></div></div>').join('');
+
+  const consejos = [];
+  if (ingresos === 0) consejos.push({ icon: '📭', t: 'Sin ingresos este mes', d: 'Cargá los laburos cobrados.' });
+  else if (pct < 10) consejos.push({ icon: '🚨', t: 'Gastás casi todo', d: 'Intentá dejar al menos un 20%.' });
+  else if (pct < 30) consejos.push({ icon: '⚠️', t: 'Podés ahorrar más', d: 'Regla 50/30/20.' });
+  else consejos.push({ icon: '🏆', t: '¡Buen ritmo!', d: 'Guardás el ' + pct + '% de lo que cobrás.' });
+  consejos.push({ icon: '🐷', t: 'Regla del 10%', d: 'Cada cobro, transferí el 10% a ahorro.' });
+  consejos.push({ icon: '📅', t: 'Fondo de emergencia', d: 'Objetivo: 3 meses de gastos.' });
+  $('consejos-lista').innerHTML = consejos.map(c => '<div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 flex gap-3"><span class="text-2xl">' + c.icon + '</span><div><p class="font-medium text-sm">' + c.t + '</p><p class="text-xs text-slate-500 mt-0.5">' + c.d + '</p></div></div>').join('');
+}
+
+function mesesLabels() {
+  const labels = [], keys = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    keys.push(d.toISOString().slice(0, 7));
+    labels.push(d.toLocaleDateString('es-PY', { month: 'short', year: '2-digit' }));
+  }
+  return { labels, keys };
+}
+function renderChartMeses() {
+  const ctx = document.getElementById('chart-meses');
+  if (!ctx || typeof Chart === 'undefined') return;
+  const { labels, keys } = mesesLabels();
+  const ing = keys.map(k => laburos.filter(l => l.estado === 'pagado' && l.fecha.startsWith(k)).reduce((s,l) => s + (l.monto||0), 0));
+  const gas = keys.map(k => gastos.filter(g => g.fecha.startsWith(k)).reduce((s,g) => s + g.monto, 0));
+  if (chartMeses) chartMeses.destroy();
+  chartMeses = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [
+      { label: 'Ingresos', data: ing, backgroundColor: 'rgba(13,148,136,0.85)', borderRadius: 6 },
+      { label: 'Gastos', data: gas, backgroundColor: 'rgba(244,63,94,0.7)', borderRadius: 6 }
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+      scales: {
+        y: { beginAtZero: true, ticks: { callback: v => v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1000 ? (v/1000)+'k' : v, font: { size: 10 } } },
+        x: { ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+}
+function renderChartClientes() {
+  const ctx = document.getElementById('chart-clientes');
+  const sin = document.getElementById('sin-chart-clientes');
+  if (!ctx || typeof Chart === 'undefined') return;
+  const map = {};
+  laburos.filter(l => l.estado === 'pagado').forEach(l => {
+    const c = (l.cliente||'').trim() || 'Sin cliente';
+    map[c] = (map[c]||0) + (l.monto||0);
+  });
+  const entries = Object.entries(map).sort((a,b) => b[1]-a[1]).slice(0, 6);
+  if (!entries.length) {
+    if (sin) sin.classList.remove('hidden');
+    if (chartClientes) { chartClientes.destroy(); chartClientes = null; }
+    return;
+  }
+  if (sin) sin.classList.add('hidden');
+  const colors = ['#0d9488','#14b8a6','#2dd4bf','#5eead4','#99f6e4','#ccfbf1'];
+  if (chartClientes) chartClientes.destroy();
+  chartClientes = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: entries.map(e => e[0].length > 14 ? e[0].slice(0,12)+'…' : e[0]),
+      datasets: [{ data: entries.map(e => e[1]), backgroundColor: colors.slice(0, entries.length), borderWidth: 0 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10 }, padding: 8 } },
+        tooltip: { callbacks: { label: c => ' ' + fmt(c.raw) } }
+      }
+    }
+  });
+}
+function renderChartEstado() {
+  const ctx = document.getElementById('chart-estado');
+  if (!ctx || typeof Chart === 'undefined') return;
+  const pagado = laburos.filter(l => l.estado === 'pagado').reduce((s,l) => s + (l.monto||0), 0);
+  const pendiente = laburos.filter(l => l.estado === 'pendiente').reduce((s,l) => s + (l.monto||0), 0);
+  if (chartEstado) chartEstado.destroy();
+  chartEstado = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Pagado', 'Pendiente'],
+      datasets: [{ data: [pagado || 0.01, pendiente || 0.01], backgroundColor: ['#10b981', '#f59e0b'], borderWidth: 0 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+        tooltip: { callbacks: { label: c => ' ' + fmt(c.raw < 1 ? 0 : c.raw) } }
+      }
+    }
+  });
+}
+
+function solicitarPermisoNotificaciones() {
+  if (!('Notification' in window)) { toast('No soportado'); return; }
+  Notification.requestPermission().then(perm => {
+    actualizarEstadoNotif();
+    if (perm === 'granted') {
+      toast('Activadas ✓'); programarNotificaciones();
+      new Notification('Mis Laburos', { body: '¡Notificaciones activadas!', tag: 'ok' });
+    } else toast('Permiso denegado');
+  });
+}
+function actualizarEstadoNotif() {
+  const s = $('notif-status');
+  if (!('Notification' in window)) { s.textContent = 'No soportado'; return; }
+  const p = Notification.permission;
+  s.textContent = p === 'granted' ? '✅ Activas' : p === 'denied' ? '❌ Bloqueadas' : 'Sin permiso aún';
+}
+function toggleNotificaciones() {
+  if (Notification.permission !== 'granted') solicitarPermisoNotificaciones();
+  else toast('Ya activadas');
+}
+function programarNotificaciones() {
+  if (notifInterval) clearInterval(notifInterval);
+  notifInterval = setInterval(chequearAlarmas, 60000);
+  setTimeout(chequearAlarmas, 2000);
+}
+function chequearAlarmas() {
+  if (Notification.permission !== 'granted') return;
+  const ahora = new Date();
+  const ha = String(ahora.getHours()).padStart(2,'0') + ':' + String(ahora.getMinutes()).padStart(2,'0');
+  const hs = hoy();
+  if (config.laburoDia && ha === (config.hora || '08:00')) {
+    const deHoy = laburos.filter(l => l.fecha === hs);
+    if (deHoy.length) enviarNotif('Laburos de hoy', 'Tenés ' + deHoy.length + ' laburo(s)', 'dia-' + hs);
+  }
+  if (config.pagosPend && ha === '19:00') {
+    const pend = laburos.filter(l => l.estado === 'pendiente' && l.fecha <= hs);
+    if (pend.length) enviarNotif('Pagos pendientes', pend.length + ' sin cobrar por ' + fmt(pend.reduce((s,l)=>s+l.monto,0)), 'pag-' + hs);
+  }
+  laburos.filter(l => l.fecha === hs && l.hora).forEach(l => {
+    const [h,m] = l.hora.split(':').map(Number);
+    const t = new Date(); t.setHours(h,m,0,0);
+    const diff = (t - ahora) / 60000;
+    if (diff > 55 && diff < 65) enviarNotif('Recordatorio', 'En 1 hora: ' + l.desc, 'h-' + l.id);
+  });
+}
+function enviarNotif(titulo, cuerpo, tag) {
+  if (sessionStorage.getItem('n-' + tag)) return;
+  sessionStorage.setItem('n-' + tag, '1');
+  new Notification(titulo, { body: cuerpo, tag });
+  $('notif-badge').classList.remove('hidden');
+}
+
+function guardarConfig() {
+  config.laburoDia = $('cfg-laburo-dia').checked;
+  config.pagosPend = $('cfg-pagos-pend').checked;
+  config.hora = $('cfg-hora').value;
+  guardar(); toast('Guardado'); programarNotificaciones();
+}
+function cargarConfigUI() {
+  $('cfg-laburo-dia').checked = config.laburoDia !== false;
+  $('cfg-pagos-pend').checked = config.pagosPend !== false;
+  $('cfg-hora').value = config.hora || '08:00';
+}
+
+
+function compartirWhatsApp() {
+  const texto = '🧰 *Mis Laburos* — agenda, facturas y control de gastos.\n\nDescargá la app (archivo HTML) y abrila en el navegador. Se guarda todo en tu celular y la podés poner en la pantalla de inicio.\\n\\nSi ya tenés el archivo, compartilo desde Ajustes → Descargar app.';
+  const url = 'https://wa.me/?text=' + encodeURIComponent(texto);
+  window.open(url, '_blank');
+}
+
+function compartirFacturaWhatsApp() {
+  if (!ultimaFacturaTexto) { toast('Generá una factura primero'); return; }
+  const url = 'https://wa.me/?text=' + encodeURIComponent(ultimaFacturaTexto);
+  window.open(url, '_blank');
+}
+
+function descargarApp() {
+  // Intenta descargar el archivo HTML de la app
+  const intentarFetch = () => fetch(location.href).then(r => {
+    if (!r.ok) throw new Error('fetch fail');
+    return r.text();
+  });
+  const porDocumento = () => {
+    // Copia el HTML completo de la página actual
+    return '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+  };
+  const bajar = (texto) => {
+    const blob = new Blob([texto], { type: 'text/html;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'Mis-Laburos.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast('App descargada ✓');
+  };
+  intentarFetch().then(bajar).catch(() => {
+    try { bajar(porDocumento()); }
+    catch (e) { toast('No se pudo descargar. Guardá la página con Ctrl+S'); }
+  });
+}
+
+function exportarDatos() {
+  const blob = new Blob([JSON.stringify({ laburos, gastos, clientesRuc, clientesDB, facturasDB, config, exportedAt: new Date().toISOString() }, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'mis-laburos-' + hoy() + '.json'; a.click();
+  toast('Backup descargado');
+}
+function importarDatos(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const r = new FileReader();
+  r.onload = ev => {
+    try {
+      const d = JSON.parse(ev.target.result);
+      if (d.laburos) laburos = d.laburos;
+      if (d.gastos) gastos = d.gastos;
+      if (d.clientesRuc) clientesRuc = d.clientesRuc;
+      if (d.clientesDB) clientesDB = d.clientesDB;
+      if (d.facturasDB) facturasDB = d.facturasDB;
+      migrarRucADB();
+      if (d.config) config = d.config;
+      guardar(); cargarConfigUI(); renderLaburos(); renderGastos(); actualizarResumen(); toast('Importado ✓');
+    } catch { toast('Archivo inválido'); }
+  };
+  r.readAsText(file);
+}
+function borrarTodo() {
+  if (!confirm('¿Borrar TODO?') || !confirm('Última confirmación')) return;
+  laburos = []; gastos = []; clientesRuc = {}; clientesDB = {}; facturasDB = [];
+  config = { laburoDia: true, pagosPend: true, hora: '08:00', emisor: 'Rufo Ferreira' };
+  guardar(); renderLaburos(); renderGastos(); actualizarResumen(); toast('Borrado');
+}
+
+
+// ==================== PWA / INSTALAR EN INICIO ====================
+let deferredPrompt = null;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  const banner = $('install-banner');
+  if (banner && !localStorage.getItem('install-dismissed')) {
+    banner.classList.remove('hidden');
+  }
+});
+
+window.addEventListener('appinstalled', () => {
+  deferredPrompt = null;
+  const banner = $('install-banner');
+  if (banner) banner.classList.add('hidden');
+  toast('¡App instalada en el inicio! 🎉');
+});
+
+function cerrarBannerInstall() {
+  const banner = $('install-banner');
+  if (banner) banner.classList.add('hidden');
+  localStorage.setItem('install-dismissed', '1');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('btn-install');
+  if (btn) {
+    btn.addEventListener('click', async () => {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        deferredPrompt = null;
+        cerrarBannerInstall();
+        if (outcome === 'accepted') toast('¡Instalada! 🎉');
+      } else {
+        // iOS / manual instructions
+        mostrarAyudaInstall();
+      }
+    });
+  }
+});
+
+function mostrarAyudaInstall() {
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isAndroid = /Android/.test(navigator.userAgent);
+  let msg = '';
+  if (isIOS) {
+    msg = 'En iPhone:\\n1. Tocá el botón Compartir (□↑)\\n2. "Agregar a pantalla de inicio"\\n3. Confirmar';
+  } else if (isAndroid) {
+    msg = 'En Android:\\n1. Menú ⋮ del navegador\\n2. "Instalar aplicación" o "Agregar a pantalla de inicio"';
+  } else {
+    msg = 'En Chrome: menú ⋮ → "Instalar Mis Laburos" o "Agregar a pantalla de inicio".';
+  }
+  alert(msg);
+}
+
+// Manifest dinámico + Service Worker para offline y "app-like"
+(function registrarPWA() {
+  // Manifest
+  const manifest = {
+    name: 'Mis Laburos',
+    short_name: 'Laburos',
+    description: 'Agenda de laburos, facturas y control de gastos',
+    start_url: location.href.split('?')[0],
+    display: 'standalone',
+    background_color: '#0f766e',
+    theme_color: '#0f766e',
+    orientation: 'portrait-primary',
+    icons: [{
+      src: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%230f766e' width='100' height='100' rx='20'/><text y='.72em' x='50%' text-anchor='middle' font-size='60'>🧰</text></svg>",
+      sizes: 'any',
+      type: 'image/svg+xml',
+      purpose: 'any maskable'
+    }]
+  };
+  const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+  const manifestURL = URL.createObjectURL(blob);
+  let link = document.querySelector('link[rel="manifest"]');
+  if (!link) {
+    link = document.createElement('link');
+    link.rel = 'manifest';
+    document.head.appendChild(link);
+  }
+  link.href = manifestURL;
+
+  // Service Worker mínimo (cache de esta página)
+  if ('serviceWorker' in navigator) {
+    const swCode = `
+      const CACHE = 'mis-laburos-v2';
+      self.addEventListener('install', e => {
+        e.waitUntil(caches.open(CACHE).then(c => c.addAll([self.registration.scope])).then(() => self.skipWaiting()));
+      });
+      self.addEventListener('activate', e => {
+        e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+      });
+      self.addEventListener('fetch', e => {
+        e.respondWith(
+          caches.match(e.request).then(r => r || fetch(e.request).then(resp => {
+            const clone = resp.clone();
+            caches.open(CACHE).then(c => c.put(e.request, clone));
+            return resp;
+          }).catch(() => caches.match(self.registration.scope)))
+        );
+      });
+    `;
+    const swBlob = new Blob([swCode], { type: 'application/javascript' });
+    const swURL = URL.createObjectURL(swBlob);
+    navigator.serviceWorker.register(swURL).catch(() => {});
+  }
+})();
+
+
+function init() {
+  $('header-date').textContent = new Date().toLocaleDateString('es-PY', { weekday: 'long', day: 'numeric', month: 'long' });
+  cargarConfigUI(); renderLaburos(); actualizarResumen(); actualizarEstadoNotif(); programarNotificaciones();
+  $('modal-laburo').addEventListener('click', e => { if (e.target === $('modal-laburo')) cerrarModal(); });
+}
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
